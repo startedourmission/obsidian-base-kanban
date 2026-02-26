@@ -1,30 +1,26 @@
-/* Toolbar */
-.base-kanban-toolbar {
-	display: flex;
-	align-items: center;
-	padding: 4px 8px;
-	gap: 4px;
-}
-
-.base-kanban-toolbar-btn {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-/* Base Kanban Board */
+/* Board */
 .base-kanban-board {
 	display: flex;
-	gap: 8px;
+	gap: 6px;
 	padding: 8px;
 	overflow-x: auto;
 	min-height: 300px;
 	align-items: flex-start;
 }
 
+/* Prevent text selection during any drag */
+.base-kanban-board.base-kanban-dragging {
+	user-select: none;
+	-webkit-user-select: none;
+}
+
 /* Lane */
 .base-kanban-lane {
-	flex: 0 0 220px;
+	flex: 0 0 180px;
+	width: 180px;
+	min-width: 180px;
+	max-width: 180px;
+	overflow: hidden;
 	background: var(--background-secondary);
 	border-radius: var(--radius-m);
 	display: flex;
@@ -35,16 +31,57 @@
 .base-kanban-lane-header {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 8px 10px;
+	gap: 4px;
+	padding: 6px 8px;
 	border-bottom: 1px solid var(--background-modifier-border);
 	position: sticky;
 	top: 0;
 }
 
+/* Lane drag handle */
+.base-kanban-lane-drag-handle {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	cursor: grab;
+	opacity: 0;
+	transition: opacity 100ms ease;
+	display: flex;
+	align-items: center;
+	touch-action: none;
+}
+
+.base-kanban-lane-drag-handle:active {
+	cursor: grabbing;
+}
+
+.base-kanban-lane-header:hover .base-kanban-lane-drag-handle {
+	opacity: 1;
+}
+
+.base-kanban-lane-drag-handle svg {
+	width: 12px;
+	height: 12px;
+}
+
+/* Lane dragging state (source lane fades out) */
+.base-kanban-lane.base-kanban-lane-dragging {
+	opacity: 0.3;
+}
+
+/* Lane drop indicator (vertical line between lanes) */
+.base-kanban-lane-drop-indicator {
+	width: 2px;
+	flex-shrink: 0;
+	background: var(--interactive-accent);
+	border-radius: 1px;
+	align-self: stretch;
+	min-height: 60px;
+	pointer-events: none;
+}
+
 .base-kanban-lane-title {
 	font-weight: var(--font-semibold);
-	font-size: var(--font-ui-small);
+	font-size: var(--font-ui-smaller);
 	flex: 1;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -55,7 +92,7 @@
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 	background: var(--background-modifier-hover);
-	padding: 0 6px;
+	padding: 0 5px;
 	border-radius: var(--radius-s);
 	line-height: 1.6;
 }
@@ -71,20 +108,15 @@
 
 /* Lane body */
 .base-kanban-lane-body {
-	padding: 6px;
+	padding: 4px;
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 3px;
 	overflow-y: auto;
 	min-height: 40px;
 }
 
-.base-kanban-lane-body.base-kanban-lane-dragover {
-	background: var(--background-modifier-hover);
-	border-radius: var(--radius-s);
-}
-
-/* Drop indicator */
+/* Drop indicator (horizontal line between cards) */
 .base-kanban-drop-indicator {
 	height: 2px;
 	background: var(--interactive-accent);
@@ -96,15 +128,15 @@
 
 /* Card */
 .base-kanban-card {
+	display: flex;
+	align-items: flex-start;
+	gap: 4px;
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
-	padding: 8px 10px;
+	padding: 6px 8px;
 	cursor: default;
 	transition: box-shadow 100ms ease, border-color 100ms ease;
-	display: flex;
-	align-items: flex-start;
-	gap: 6px;
 }
 
 .base-kanban-card:hover {
@@ -112,8 +144,9 @@
 	box-shadow: var(--shadow-s);
 }
 
+/* Card being dragged (source fades out) */
 .base-kanban-card.base-kanban-card-dragging {
-	opacity: 0.4;
+	opacity: 0.3;
 }
 
 /* Drag handle */
@@ -125,7 +158,8 @@
 	transition: opacity 100ms ease;
 	display: flex;
 	align-items: center;
-	padding: 2px 0;
+	margin-top: 1px;
+	touch-action: none;
 }
 
 .base-kanban-card-handle:active {
@@ -137,21 +171,59 @@
 }
 
 .base-kanban-card-handle svg {
-	width: 14px;
-	height: 14px;
+	width: 12px;
+	height: 12px;
 }
 
-/* Card content wrapper */
+/* ─── Ghost elements (shared) ─── */
+.base-kanban-drag-ghost {
+	position: fixed;
+	z-index: 1000;
+	pointer-events: none;
+	opacity: 0.8;
+	box-shadow: var(--shadow-s);
+	transition: none;
+}
+
+/* Card ghost */
+.base-kanban-card-ghost {
+	width: 160px;
+	max-width: 160px;
+	overflow: hidden;
+}
+
+/* Lane ghost */
+.base-kanban-lane-ghost {
+	width: 180px;
+	max-width: 180px;
+	max-height: 300px;
+	overflow: hidden;
+}
+
+/* Card content */
+.base-kanban-card-content {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+}
+
 .base-kanban-card-title {
-	margin-bottom: 4px;
+	margin-bottom: 2px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .base-kanban-card-link {
 	font-weight: var(--font-medium);
-	font-size: var(--font-ui-small);
+	font-size: var(--font-ui-smaller);
 	color: var(--text-normal);
 	text-decoration: none;
 	cursor: pointer;
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .base-kanban-card-link:hover {
@@ -163,15 +235,15 @@
 .base-kanban-card-props {
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
-	margin-top: 4px;
+	gap: 1px;
+	margin-top: 3px;
 }
 
 .base-kanban-card-prop {
 	display: flex;
 	gap: 4px;
 	font-size: var(--font-ui-smaller);
-	line-height: 1.4;
+	line-height: 1.3;
 }
 
 .base-kanban-card-prop-label {
@@ -186,6 +258,19 @@
 	white-space: nowrap;
 }
 
+/* Links */
+.base-kanban-card-internal-link,
+.base-kanban-card-external-link {
+	color: var(--text-accent);
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.base-kanban-card-internal-link:hover,
+.base-kanban-card-external-link:hover {
+	text-decoration: underline;
+}
+
 /* Empty state */
 .base-kanban-empty {
 	display: flex;
@@ -198,45 +283,4 @@
 
 .base-kanban-empty p {
 	font-size: var(--font-ui-small);
-}
-
-/* Layout: Compact */
-.base-kanban-layout-compact .base-kanban-card-props {
-	display: none;
-}
-
-.base-kanban-layout-compact .base-kanban-card {
-	padding: 4px 8px;
-}
-
-.base-kanban-layout-compact .base-kanban-card-title {
-	margin-bottom: 0;
-}
-
-/* Layout: Detailed */
-.base-kanban-layout-detailed .base-kanban-card-prop-value {
-	white-space: normal;
-	overflow: visible;
-	text-overflow: unset;
-}
-
-/* Links in property values */
-.base-kanban-card-internal-link {
-	color: var(--text-accent);
-	cursor: pointer;
-	text-decoration: none;
-}
-
-.base-kanban-card-internal-link:hover {
-	text-decoration: underline;
-}
-
-.base-kanban-card-external-link {
-	color: var(--text-accent);
-	cursor: pointer;
-	text-decoration: none;
-}
-
-.base-kanban-card-external-link:hover {
-	text-decoration: underline;
 }
