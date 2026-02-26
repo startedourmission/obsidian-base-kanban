@@ -4,6 +4,8 @@ A Kanban board view for [Obsidian Bases](https://obsidian.md). Organize your not
 
 Requires Obsidian **1.10.0+** (Bases API).
 
+<img width="746" height="525" alt="image" src="https://github.com/user-attachments/assets/a38365e0-d667-4d2c-81df-64c461b643c1" />
+
 ## Features
 
 - **Kanban lanes** grouped by any property (e.g. status, priority, category)
