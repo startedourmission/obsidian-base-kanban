@@ -1,7 +1,7 @@
 {
-  "name": "base-kanban",
-  "version": "1.0.0",
-  "description": "Kanban view for Obsidian Bases",
+  "name": "advanced-base",
+  "version": "1.1.0",
+  "description": "Kanban board and Gantt chart views for Obsidian Bases",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
