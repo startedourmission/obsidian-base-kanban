@@ -5,6 +5,8 @@ Extra views for [Obsidian Bases](https://obsidian.md) — Kanban board and Gantt
 Requires Obsidian **1.10.0+** (Bases API).
 
 <img width="746" height="525" alt="image" src="https://github.com/user-attachments/assets/a38365e0-d667-4d2c-81df-64c461b643c1" />
+<img width="1016" height="433" alt="image" src="https://github.com/user-attachments/assets/286011c0-dbc8-4ed1-b680-17cd1d45e906" />
+
 
 ## Kanban Board
 
