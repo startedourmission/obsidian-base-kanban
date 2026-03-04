@@ -214,13 +214,13 @@ export class GanttView extends BasesView {
 			let startDate: Date | null = null;
 			let dueDate: Date | null = null;
 
-			const startMatch = taskText.match(/🛫\s*(\d{4}-\d{2}-\d{2})/);
+			const startMatch = taskText.match(/🛫\s*(\d{4}-\d{2}-\d{2})/u);
 			if (startMatch) startDate = new Date(startMatch[1]);
 
-			const dueMatch = taskText.match(/📅\s*(\d{4}-\d{2}-\d{2})/);
+			const dueMatch = taskText.match(/📅\s*(\d{4}-\d{2}-\d{2})/u);
 			if (dueMatch) dueDate = new Date(dueMatch[1]);
 
-			const scheduledMatch = taskText.match(/⏳\s*(\d{4}-\d{2}-\d{2})/);
+			const scheduledMatch = taskText.match(/⏳\s*(\d{4}-\d{2}-\d{2})/u);
 			if (!startDate && scheduledMatch) startDate = new Date(scheduledMatch[1]);
 
 			// Need at least one date to show on gantt
@@ -228,7 +228,7 @@ export class GanttView extends BasesView {
 
 			// Clean task text (remove emoji dates)
 			let cleanText = taskText
-				.replace(/[🛫📅⏳✅]\s*\d{4}-\d{2}-\d{2}/g, "")
+				.replace(/(?:🛫|📅|⏳|✅)\s*\d{4}-\d{2}-\d{2}/gu, "")
 				.trim();
 
 			const SUB_DAY_MS = 86400000;
