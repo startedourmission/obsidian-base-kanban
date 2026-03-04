@@ -432,12 +432,16 @@
 	white-space: nowrap;
 	position: sticky;
 	left: 0;
-	z-index: 3;
-	background: inherit;
+	z-index: 5;
+	background: var(--background-primary);
 	height: 100%;
 	display: flex;
 	align-items: center;
 	border-right: 1px solid var(--background-modifier-border);
+}
+
+.base-gantt-row-alt .base-gantt-row-label {
+	background: var(--background-secondary-alt);
 }
 
 .base-gantt-task-link {

@@ -1,6 +1,6 @@
 {
   "name": "advanced-base",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Kanban board and Gantt chart views for Obsidian Bases",
   "main": "main.js",
   "scripts": {

@@ -20,6 +20,7 @@ export class KanbanView extends BasesView {
 	private cardDragState: {
 		entry: BasesEntry;
 		sourceCard: HTMLElement;
+		sourceLane: string;
 		ghost: HTMLElement;
 		indicator: HTMLElement | null;
 		offsetX: number;
@@ -76,7 +77,7 @@ export class KanbanView extends BasesView {
 
 		const sortProp = this.config.getAsPropertyId("sortProperty");
 		const lanes = this.buildLanes(statusProp, sortProp);
-		this.renderBoard(lanes, statusProp, sortProp);
+		this.renderBoard(lanes, statusProp);
 	}
 
 	private renderEmptyState(): void {
@@ -117,14 +118,13 @@ export class KanbanView extends BasesView {
 	private renderBoard(
 		lanes: Map<string, BasesEntry[]>,
 		statusProp: BasesPropertyId,
-		sortProp: BasesPropertyId | null,
 	): void {
 		const displayProps = this.config
 			.getOrder()
 			.filter((p) => p !== statusProp);
 
 		for (const [laneTitle, entries] of lanes) {
-			this.renderLane(laneTitle, entries, displayProps, statusProp, sortProp);
+			this.renderLane(laneTitle, entries, displayProps, statusProp);
 		}
 	}
 
@@ -133,7 +133,6 @@ export class KanbanView extends BasesView {
 		entries: BasesEntry[],
 		displayProps: BasesPropertyId[],
 		statusProp: BasesPropertyId,
-		sortProp: BasesPropertyId | null,
 	): void {
 		const laneEl = this.boardEl.createDiv({ cls: "base-kanban-lane" });
 		laneEl.dataset.laneTitle = title;
@@ -174,7 +173,7 @@ export class KanbanView extends BasesView {
 		bodyEl.dataset.lane = title;
 
 		for (const entry of entries) {
-			this.renderCard(bodyEl, entry, displayProps, statusProp, sortProp);
+			this.renderCard(bodyEl, entry, displayProps, statusProp);
 		}
 	}
 
@@ -301,7 +300,6 @@ export class KanbanView extends BasesView {
 		entry: BasesEntry,
 		displayProps: BasesPropertyId[],
 		statusProp: BasesPropertyId,
-		sortProp: BasesPropertyId | null,
 	): void {
 		const cardEl = parentEl.createDiv({ cls: "base-kanban-card" });
 		cardEl.dataset.filePath = entry.file.path;
@@ -327,7 +325,7 @@ export class KanbanView extends BasesView {
 			if (e.button !== 0) return;
 			e.preventDefault();
 			e.stopPropagation();
-			this.startCardDrag(e, cardEl, entry, handleEl, statusProp, sortProp);
+			this.startCardDrag(e, cardEl, entry, handleEl, statusProp);
 		});
 
 		// Card content
@@ -366,7 +364,6 @@ export class KanbanView extends BasesView {
 		entry: BasesEntry,
 		handle: HTMLElement,
 		statusProp: BasesPropertyId,
-		sortProp: BasesPropertyId | null,
 	): void {
 		handle.setPointerCapture(e.pointerId);
 
@@ -384,9 +381,12 @@ export class KanbanView extends BasesView {
 		cardEl.addClass("base-kanban-card-dragging");
 		this.boardEl.addClass("base-kanban-dragging");
 
+		const sourceLane = cardEl.closest(".base-kanban-lane-body")?.dataset.lane ?? "";
+
 		this.cardDragState = {
 			entry,
 			sourceCard: cardEl,
+			sourceLane,
 			ghost,
 			indicator: null,
 			offsetX,
@@ -416,7 +416,7 @@ export class KanbanView extends BasesView {
 			handle.removeEventListener("pointermove", onMove);
 			handle.removeEventListener("pointerup", onUp);
 			handle.removeEventListener("pointercancel", onUp);
-			this.finishCardDrag(statusProp, sortProp);
+			this.finishCardDrag(statusProp);
 		};
 
 		handle.addEventListener("pointermove", onMove);
@@ -483,7 +483,6 @@ export class KanbanView extends BasesView {
 
 	private finishCardDrag(
 		statusProp: BasesPropertyId,
-		sortProp: BasesPropertyId | null,
 	): void {
 		if (!this.cardDragState) return;
 		const state = this.cardDragState;
@@ -493,8 +492,10 @@ export class KanbanView extends BasesView {
 			const bodyEl = indicator.parentElement;
 			if (bodyEl) {
 				const laneName = bodyEl.dataset.lane ?? "";
-				const insertIndex = this.getDropIndex(bodyEl, indicator);
-				this.moveCardToLane(state.entry, laneName, statusProp, sortProp, bodyEl, insertIndex);
+				// Skip if dropped in the same lane (no property change needed)
+				if (laneName !== state.sourceLane) {
+					this.moveCardToLane(state.entry, laneName, statusProp);
+				}
 			}
 		}
 
@@ -511,28 +512,6 @@ export class KanbanView extends BasesView {
 		state.sourceCard.removeClass("base-kanban-card-dragging");
 		this.boardEl.removeClass("base-kanban-dragging");
 		this.cardDragState = null;
-	}
-
-	private getDropIndex(bodyEl: HTMLElement, indicator: HTMLElement): number {
-		const cards = Array.from(
-			bodyEl.querySelectorAll(".base-kanban-card:not(.base-kanban-card-dragging)"),
-		);
-		for (let i = 0; i < cards.length; i++) {
-			// If the indicator comes before this card in DOM, insertion index is i
-			if (cards[i].compareDocumentPosition(indicator) & Node.DOCUMENT_POSITION_PRECEDING) {
-				// indicator is before cards[i] — not the case, check the other way
-			}
-			// Simpler: check if indicator is before the card in DOM order
-		}
-		// More reliable: iterate children and count cards before the indicator
-		let idx = 0;
-		for (const child of Array.from(bodyEl.children)) {
-			if (child === indicator) return idx;
-			if (child.classList.contains("base-kanban-card") && !child.classList.contains("base-kanban-card-dragging")) {
-				idx++;
-			}
-		}
-		return idx;
 	}
 
 	// ─── Link rendering ───
@@ -586,49 +565,31 @@ export class KanbanView extends BasesView {
 		entry: BasesEntry,
 		laneValue: string,
 		statusProp: BasesPropertyId,
-		sortProp: BasesPropertyId | null,
-		bodyEl: HTMLElement,
-		insertIndex: number,
 	): Promise<void> {
 		const propName = statusProp.replace(/^note\./, "");
-		const newValue = laneValue === "(No value)" ? null : laneValue;
 
+		if (laneValue === "(No value)") {
+			await this.app.fileManager.processFrontMatter(entry.file, (fm) => {
+				delete fm[propName];
+			});
+			return;
+		}
+
+		// Preserve original value type: read existing frontmatter to detect type
 		await this.app.fileManager.processFrontMatter(entry.file, (fm) => {
-			if (newValue === null) delete fm[propName];
-			else fm[propName] = newValue;
+			const existing = fm[propName];
+			let coerced: unknown = laneValue;
+
+			if (typeof existing === "number") {
+				const n = Number(laneValue);
+				if (!isNaN(n)) coerced = n;
+			} else if (typeof existing === "boolean") {
+				if (laneValue === "true") coerced = true;
+				else if (laneValue === "false") coerced = false;
+			}
+
+			fm[propName] = coerced;
 		});
-
-		if (sortProp) {
-			await this.updateSortValues(sortProp, bodyEl, entry, insertIndex);
-		}
-	}
-
-	private async updateSortValues(
-		sortProp: BasesPropertyId,
-		bodyEl: HTMLElement,
-		movedEntry: BasesEntry,
-		insertIndex: number,
-	): Promise<void> {
-		const sortPropName = sortProp.replace(/^note\./, "");
-		const cardEls = Array.from(bodyEl.querySelectorAll(".base-kanban-card")) as HTMLElement[];
-
-		const laneEntries: BasesEntry[] = [];
-		for (const cardEl of cardEls) {
-			const fp = cardEl.dataset.filePath;
-			if (!fp) continue;
-			const found = this.data.data.find((e) => e.file.path === fp);
-			if (found && found !== movedEntry) laneEntries.push(found);
-		}
-
-		laneEntries.splice(insertIndex, 0, movedEntry);
-
-		await Promise.all(
-			laneEntries.map((e, i) =>
-				this.app.fileManager.processFrontMatter(e.file, (fm) => {
-					fm[sortPropName] = (i + 1) * 10;
-				}),
-			),
-		);
 	}
 
 	private async createCardInLane(
