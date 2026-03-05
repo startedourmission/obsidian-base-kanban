@@ -75,8 +75,7 @@ export class KanbanView extends BasesView {
 			return;
 		}
 
-		const sortProp = this.config.getAsPropertyId("sortProperty");
-		const lanes = this.buildLanes(statusProp, sortProp);
+		const lanes = this.buildLanes(statusProp);
 		this.renderBoard(lanes, statusProp);
 	}
 
@@ -91,7 +90,6 @@ export class KanbanView extends BasesView {
 
 	private buildLanes(
 		statusProp: BasesPropertyId,
-		sortProp: BasesPropertyId | null,
 	): Map<string, BasesEntry[]> {
 		const lanes = new Map<string, BasesEntry[]>();
 
@@ -102,13 +100,20 @@ export class KanbanView extends BasesView {
 			lanes.get(key)!.push(entry);
 		}
 
-		if (sortProp) {
-			for (const [, entries] of lanes) {
+		// Apply saved order or fall back to file name sort
+		const savedOrder = this.getSavedCardOrder();
+		for (const [laneKey, entries] of lanes) {
+			const order = savedOrder[laneKey];
+			if (order) {
+				const orderMap = new Map(order.map((p, i) => [p, i]));
 				entries.sort((a, b) => {
-					const aNum = toNum(a.getValue(sortProp));
-					const bNum = toNum(b.getValue(sortProp));
-					return aNum - bNum;
+					const ai = orderMap.get(a.file.path) ?? Infinity;
+					const bi = orderMap.get(b.file.path) ?? Infinity;
+					if (ai !== Infinity || bi !== Infinity) return ai - bi;
+					return a.file.basename.localeCompare(b.file.basename);
 				});
+			} else {
+				entries.sort((a, b) => a.file.basename.localeCompare(b.file.basename));
 			}
 		}
 
@@ -492,10 +497,11 @@ export class KanbanView extends BasesView {
 			const bodyEl = indicator.parentElement;
 			if (bodyEl) {
 				const laneName = bodyEl.dataset.lane ?? "";
-				// Skip if dropped in the same lane (no property change needed)
 				if (laneName !== state.sourceLane) {
 					this.moveCardToLane(state.entry, laneName, statusProp);
 				}
+				// Save card order for the target lane
+				this.saveLaneOrder(bodyEl, laneName, state.entry, indicator);
 			}
 		}
 
@@ -512,6 +518,46 @@ export class KanbanView extends BasesView {
 		state.sourceCard.removeClass("base-kanban-card-dragging");
 		this.boardEl.removeClass("base-kanban-dragging");
 		this.cardDragState = null;
+	}
+
+	// ─── Card order persistence ───
+
+	private getSavedCardOrder(): Record<string, string[]> {
+		try {
+			const raw = this.config.get("cardOrder");
+			return raw ? JSON.parse(String(raw)) : {};
+		} catch {
+			return {};
+		}
+	}
+
+	private saveLaneOrder(
+		bodyEl: HTMLElement,
+		laneName: string,
+		movedEntry: BasesEntry,
+		indicator: HTMLElement,
+	): void {
+		// Build new order from DOM: cards before indicator, then moved card, then cards after
+		const order: string[] = [];
+		for (const child of Array.from(bodyEl.children)) {
+			if (child === indicator) {
+				order.push(movedEntry.file.path);
+			} else if (
+				child.classList.contains("base-kanban-card") &&
+				!child.classList.contains("base-kanban-card-dragging")
+			) {
+				const fp = (child as HTMLElement).dataset.filePath;
+				if (fp) order.push(fp);
+			}
+		}
+		// If indicator was at the end (after all cards)
+		if (!order.includes(movedEntry.file.path)) {
+			order.push(movedEntry.file.path);
+		}
+
+		const saved = this.getSavedCardOrder();
+		saved[laneName] = order;
+		this.config.set("cardOrder", JSON.stringify(saved));
 	}
 
 	// ─── Link rendering ───
@@ -615,13 +661,6 @@ export class KanbanView extends BasesView {
 				filter: (prop: string) => !prop.startsWith("file."),
 				placeholder: "Select a property for lanes",
 			},
-			{
-				displayName: "Sort property",
-				type: "property",
-				key: "sortProperty",
-				filter: (prop: string) => !prop.startsWith("file."),
-				placeholder: "Select a number property for ordering",
-			},
 		];
 	}
 
@@ -636,8 +675,3 @@ export class KanbanView extends BasesView {
 	}
 }
 
-function toNum(val: unknown): number {
-	if (val == null) return Infinity;
-	const n = Number(val);
-	return isNaN(n) ? Infinity : n;
-}
