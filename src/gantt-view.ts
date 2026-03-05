@@ -208,6 +208,7 @@ export class GanttView extends BasesView {
 			if (!taskMatch) continue;
 
 			const completed = taskMatch[1] !== " ";
+			if (completed) continue; // Skip completed tasks
 			const taskText = taskMatch[2];
 
 			// Parse emoji dates
