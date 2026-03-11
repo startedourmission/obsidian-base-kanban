@@ -493,6 +493,10 @@
 	min-width: 6px;
 }
 
+.base-gantt-bar.base-gantt-bar-no-drag {
+	cursor: default;
+}
+
 .base-gantt-bar:hover {
 	filter: brightness(1.1);
 }

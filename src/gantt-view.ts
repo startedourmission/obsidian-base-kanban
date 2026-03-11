@@ -3,6 +3,7 @@ import {
 	BasesEntry,
 	BasesPropertyId,
 	BasesViewConfig,
+	BasesAllOptions,
 	QueryController,
 	Menu,
 } from "obsidian";
@@ -269,7 +270,7 @@ export class GanttView extends BasesView {
 		const toolbar = this.rootEl.createDiv({ cls: "base-gantt-scale-toolbar" });
 		const current = this.getScale();
 
-		for (const s of ["day", "week", "month"] as TimeScale[]) {
+		for (const s of ["day", "week", "month"] as const) {
 			const btn = toolbar.createEl("button", {
 				cls: `base-gantt-scale-btn clickable-icon${s === current ? " is-active" : ""}`,
 				text: s === "day" ? "Day" : s === "week" ? "Week" : "Month",
@@ -285,7 +286,7 @@ export class GanttView extends BasesView {
 			cls: "base-gantt-scale-btn clickable-icon base-gantt-toggle-all-btn",
 			text: this.expandedTasks.size > 0 ? "Collapse All" : "Expand All",
 		});
-		toggleAllBtn.addEventListener("click", async () => {
+		toggleAllBtn.addEventListener("click", () => {
 			if (this.expandedTasks.size > 0) {
 				// Collapse all
 				this.expandedTasks.clear();
@@ -333,12 +334,13 @@ export class GanttView extends BasesView {
 			for (const task of this.tasks) {
 				const filePath = task.entry.file.path;
 				if (!this.expandedTasks.has(filePath)) continue;
-				const row = rowsEl.children[Array.from(rowsEl.querySelectorAll(".base-gantt-row")).findIndex(
+				const rowIndex = Array.from(rowsEl.querySelectorAll(".base-gantt-row")).findIndex(
 					(r) => r.querySelector(".base-gantt-task-link")?.textContent === task.entry.file.basename
-				)] as HTMLElement;
-				if (!row) continue;
+				);
+				const row = rowIndex >= 0 ? rowsEl.children[rowIndex] : null;
+				if (!row || !(row instanceof HTMLElement)) continue;
 				task.el?.addClass("base-gantt-bar-expanded");
-				this.parseSubTasks(task.entry.file).then((subTasks) => {
+				void this.parseSubTasks(task.entry.file).then((subTasks) => {
 					this.subTaskCache.set(filePath, subTasks);
 					this.renderSubRows(row, task, subTasks, rangeStart, totalDays);
 					this.recalcChartHeight();
@@ -360,16 +362,22 @@ export class GanttView extends BasesView {
 		}
 
 		const scale = this.getScale();
-		const padDays = scale === "month" ? 15 : scale === "week" ? 7 : 3;
+		const padDays = scale === "month" ? 30 : scale === "week" ? 14 : 7;
 
 		const rangeStart = new Date(minTime - padDays * DAY_MS);
 		rangeStart.setHours(0, 0, 0, 0);
 		const rangeEnd = new Date(maxTime + padDays * DAY_MS);
 		rangeEnd.setHours(0, 0, 0, 0);
 
+		// Ensure chart is wide enough to fill the viewport
+		const sc = SCALES[scale];
+		const wrapperWidth = this.rootEl.clientWidth || 800;
+		const minDaysForViewport = Math.ceil((wrapperWidth - LABEL_WIDTH) / sc.pxPerDay);
+		const dataDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / DAY_MS);
+
 		// Cap to prevent DOM explosion
 		const MAX_DAYS = 1500;
-		const totalDays = Math.min(MAX_DAYS, Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / DAY_MS));
+		const totalDays = Math.min(MAX_DAYS, Math.max(dataDays, minDaysForViewport));
 		return { rangeStart, rangeEnd, totalDays };
 	}
 
@@ -431,12 +439,6 @@ export class GanttView extends BasesView {
 
 		let currentMonth = -1;
 		let monthStartPx = 0;
-
-		// Find the first Monday on or after rangeStart
-		const firstDay = new Date(rangeStart);
-		const dow = firstDay.getDay();
-		const offsetToMonday = dow === 0 ? 1 : dow === 1 ? 0 : 8 - dow;
-		const firstMonday = new Date(firstDay.getTime() + offsetToMonday * DAY_MS);
 
 		// Render week columns
 		for (let d = 0; d < totalDays; d += 7) {
@@ -572,7 +574,7 @@ export class GanttView extends BasesView {
 			cls: "base-gantt-task-link",
 		});
 		link.addEventListener("click", () => {
-			this.app.workspace.getLeaf(false).openFile(task.entry.file);
+			void this.app.workspace.getLeaf(false).openFile(task.entry.file);
 		});
 
 		// Grid background
@@ -591,7 +593,7 @@ export class GanttView extends BasesView {
 		const bar = gridEl.createDiv({ cls: "base-gantt-bar" });
 		bar.style.left = `${barLeft}px`;
 		bar.style.width = `${barWidth}px`;
-		if (!canDrag) bar.style.cursor = "default";
+		if (!canDrag) bar.addClass("base-gantt-bar-no-drag");
 		task.el = bar;
 
 		// Resize handles (only if draggable)
@@ -614,8 +616,8 @@ export class GanttView extends BasesView {
 			menu.addItem((item) => {
 				const i = item.setTitle("Delete note").setIcon("trash");
 				if (typeof i.setWarning === "function") i.setWarning(true);
-				i.onClick(async () => {
-					await this.app.vault.trash(task.entry.file, true);
+				i.onClick(() => {
+					void this.app.fileManager.trashFile(task.entry.file);
 				});
 			});
 			menu.showAtMouseEvent(e);
@@ -626,7 +628,7 @@ export class GanttView extends BasesView {
 		bar.addEventListener("pointerdown", (e: PointerEvent) => {
 			pointerDownPos = { x: e.clientX, y: e.clientY };
 		});
-		bar.addEventListener("click", async (e: MouseEvent) => {
+		bar.addEventListener("click", (e: MouseEvent) => {
 			if (pointerDownPos) {
 				const dx = Math.abs(e.clientX - pointerDownPos.x);
 				const dy = Math.abs(e.clientY - pointerDownPos.y);
@@ -648,10 +650,11 @@ export class GanttView extends BasesView {
 			} else {
 				this.expandedTasks.add(filePath);
 				bar.addClass("base-gantt-bar-expanded");
-				const subTasks = await this.parseSubTasks(task.entry.file);
-				this.subTaskCache.set(filePath, subTasks);
-				this.renderSubRows(row, task, subTasks, rangeStart, totalDays);
-				this.recalcChartHeight();
+				void this.parseSubTasks(task.entry.file).then((subTasks) => {
+					this.subTaskCache.set(filePath, subTasks);
+					this.renderSubRows(row, task, subTasks, rangeStart, totalDays);
+					this.recalcChartHeight();
+				});
 			}
 		});
 
@@ -747,7 +750,7 @@ export class GanttView extends BasesView {
 		const rows = this.rootEl.querySelector(".base-gantt-rows");
 		if (!rows) return;
 		const totalRows = rows.childElementCount;
-		const chart = this.rootEl.querySelector(".base-gantt-chart") as HTMLElement;
+		const chart = this.rootEl.querySelector<HTMLElement>(".base-gantt-chart");
 		if (chart) {
 			chart.style.height = `${HEADER_HEIGHT + totalRows * ROW_HEIGHT}px`;
 		}
@@ -812,7 +815,7 @@ export class GanttView extends BasesView {
 			barEl.removeEventListener("pointermove", onMove);
 			barEl.removeEventListener("pointerup", onUp);
 			barEl.removeEventListener("pointercancel", onUp);
-			this.finishDrag(barEl, startProp, endProp);
+			void this.finishDrag(barEl, startProp, endProp);
 		};
 
 		barEl.addEventListener("pointermove", onMove);
@@ -889,7 +892,7 @@ export class GanttView extends BasesView {
 
 	// ─── View options ───
 
-	static getViewOptions(config: BasesViewConfig): any[] {
+	static getViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 		return [
 			{
 				displayName: "Start date property",
@@ -907,17 +910,17 @@ export class GanttView extends BasesView {
 	}
 
 	public getEphemeralState(): unknown {
-		const wrapper = this.rootEl.querySelector(".base-gantt-wrapper");
+		const wrapper = this.rootEl.querySelector<HTMLElement>(".base-gantt-wrapper");
 		return {
-			scrollLeft: (wrapper as HTMLElement)?.scrollLeft ?? 0,
-			scrollTop: (wrapper as HTMLElement)?.scrollTop ?? 0,
+			scrollLeft: wrapper?.scrollLeft ?? 0,
+			scrollTop: wrapper?.scrollTop ?? 0,
 		};
 	}
 
 	public setEphemeralState(state: unknown): void {
-		if (state && typeof state === "object") {
+		if (state && typeof state === "object" && "scrollLeft" in state && "scrollTop" in state) {
 			const s = state as { scrollLeft?: number; scrollTop?: number };
-			const wrapper = this.rootEl.querySelector(".base-gantt-wrapper") as HTMLElement;
+			const wrapper = this.rootEl.querySelector<HTMLElement>(".base-gantt-wrapper");
 			if (wrapper) {
 				if (s.scrollLeft != null) wrapper.scrollLeft = s.scrollLeft;
 				if (s.scrollTop != null) wrapper.scrollTop = s.scrollTop;

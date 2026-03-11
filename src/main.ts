@@ -3,7 +3,7 @@ import { KanbanView } from "./kanban-view";
 import { GanttView } from "./gantt-view";
 
 export default class BaseKanbanPlugin extends Plugin {
-	async onload() {
+	onload() {
 		this.registerBasesView("kanban", {
 			name: "Kanban",
 			icon: "columns-3",

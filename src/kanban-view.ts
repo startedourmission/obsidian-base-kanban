@@ -3,8 +3,8 @@ import {
 	BasesEntry,
 	BasesPropertyId,
 	BasesViewConfig,
+	BasesAllOptions,
 	QueryController,
-	TFile,
 	Menu,
 	setIcon,
 } from "obsidian";
@@ -95,7 +95,7 @@ export class KanbanView extends BasesView {
 
 		for (const entry of this.data.data) {
 			const val = entry.getValue(statusProp);
-			const key = val ? String(val) : "(No value)";
+			const key = val == null ? "(No value)" : (typeof val === "object" ? JSON.stringify(val) : String(val));
 			if (!lanes.has(key)) lanes.set(key, []);
 			lanes.get(key)!.push(entry);
 		}
@@ -162,7 +162,7 @@ export class KanbanView extends BasesView {
 		});
 		setIcon(addBtn, "plus");
 		addBtn.addEventListener("click", () => {
-			this.createCardInLane(title, statusProp);
+			void this.createCardInLane(title, statusProp);
 		});
 
 		// Lane drag via pointer events on the grip handle
@@ -248,8 +248,8 @@ export class KanbanView extends BasesView {
 		this.laneDragState.indicator = null;
 
 		const lanes = Array.from(
-			this.boardEl.querySelectorAll(".base-kanban-lane:not(.base-kanban-lane-dragging)"),
-		) as HTMLElement[];
+			this.boardEl.querySelectorAll<HTMLElement>(".base-kanban-lane:not(.base-kanban-lane-dragging)"),
+		);
 
 		let insertBefore: HTMLElement | null = null;
 		for (const lane of lanes) {
@@ -315,8 +315,8 @@ export class KanbanView extends BasesView {
 			menu.addItem((item) => {
 				const i = item.setTitle("Delete note").setIcon("trash");
 				if (typeof i.setWarning === "function") i.setWarning(true);
-				i.onClick(async () => {
-					await this.app.vault.trash(entry.file, true);
+				i.onClick(() => {
+					void this.app.fileManager.trashFile(entry.file);
 				});
 			});
 			menu.showAtMouseEvent(event);
@@ -342,7 +342,7 @@ export class KanbanView extends BasesView {
 			cls: "base-kanban-card-link",
 		});
 		titleEl.addEventListener("click", () => {
-			this.app.workspace.getLeaf(false).openFile(entry.file);
+			void this.app.workspace.getLeaf(false).openFile(entry.file);
 		});
 
 		if (displayProps.length > 0) {
@@ -356,7 +356,8 @@ export class KanbanView extends BasesView {
 					text: this.config.getDisplayName(prop),
 				});
 				const valueEl = propEl.createEl("span", { cls: "base-kanban-card-prop-value" });
-				this.renderPropertyValue(valueEl, String(val), entry);
+				const valStr = typeof val === "object" ? JSON.stringify(val) : String(val);
+				this.renderPropertyValue(valueEl, valStr, entry);
 			}
 		}
 	}
@@ -386,7 +387,7 @@ export class KanbanView extends BasesView {
 		cardEl.addClass("base-kanban-card-dragging");
 		this.boardEl.addClass("base-kanban-dragging");
 
-		const sourceLane = cardEl.closest(".base-kanban-lane-body")?.dataset.lane ?? "";
+		const sourceLane = cardEl.closest<HTMLElement>(".base-kanban-lane-body")?.dataset.lane ?? "";
 
 		this.cardDragState = {
 			entry,
@@ -438,12 +439,11 @@ export class KanbanView extends BasesView {
 
 		// Find which lane body the cursor is over
 		const laneBodies = Array.from(
-			this.boardEl.querySelectorAll(".base-kanban-lane-body"),
-		) as HTMLElement[];
+			this.boardEl.querySelectorAll<HTMLElement>(".base-kanban-lane-body"),
+		);
 
 		let targetBody: HTMLElement | null = null;
 		for (const body of laneBodies) {
-			const rect = body.getBoundingClientRect();
 			// Use the lane's full horizontal extent (check parent lane element)
 			const laneEl = body.parentElement;
 			if (!laneEl) continue;
@@ -463,8 +463,8 @@ export class KanbanView extends BasesView {
 
 		// Find insertion position among cards in this body
 		const cards = Array.from(
-			targetBody.querySelectorAll(".base-kanban-card:not(.base-kanban-card-dragging)"),
-		) as HTMLElement[];
+			targetBody.querySelectorAll<HTMLElement>(".base-kanban-card:not(.base-kanban-card-dragging)"),
+		);
 
 		let insertBefore: HTMLElement | null = null;
 		for (const card of cards) {
@@ -498,7 +498,7 @@ export class KanbanView extends BasesView {
 			if (bodyEl) {
 				const laneName = bodyEl.dataset.lane ?? "";
 				if (laneName !== state.sourceLane) {
-					this.moveCardToLane(state.entry, laneName, statusProp);
+					void this.moveCardToLane(state.entry, laneName, statusProp);
 				}
 				// Save card order for the target lane
 				this.saveLaneOrder(bodyEl, laneName, state.entry, indicator);
@@ -525,7 +525,10 @@ export class KanbanView extends BasesView {
 	private getSavedCardOrder(): Record<string, string[]> {
 		try {
 			const raw = this.config.get("cardOrder");
-			return raw ? JSON.parse(String(raw)) : {};
+			if (!raw) return {};
+			if (typeof raw === "string") return JSON.parse(raw) as Record<string, string[]>;
+			if (typeof raw === "object") return raw as Record<string, string[]>;
+			return {};
 		} catch {
 			return {};
 		}
@@ -585,7 +588,7 @@ export class KanbanView extends BasesView {
 				});
 				linkEl.addEventListener("click", (e) => {
 					e.stopPropagation();
-					this.app.workspace.openLinkText(linkTarget, entry.file.path);
+					void this.app.workspace.openLinkText(linkTarget, entry.file.path);
 				});
 			} else if (match[3] !== undefined) {
 				const url = match[3];
@@ -652,7 +655,7 @@ export class KanbanView extends BasesView {
 
 	// ─── View options ───
 
-	static getViewOptions(config: BasesViewConfig): any[] {
+	static getViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 		return [
 			{
 				displayName: "Status property",
@@ -670,7 +673,8 @@ export class KanbanView extends BasesView {
 
 	public setEphemeralState(state: unknown): void {
 		if (state && typeof state === "object" && "scrollLeft" in state) {
-			this.boardEl.scrollLeft = (state as { scrollLeft: number }).scrollLeft;
+			const s = state as { scrollLeft: number };
+			this.boardEl.scrollLeft = s.scrollLeft;
 		}
 	}
 }
